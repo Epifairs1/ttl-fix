@@ -27,28 +27,29 @@ jobs:
           PREFIX=$PWD/deps-arm64/install
           mkdir -p deps-arm64 && cd deps-arm64
 
-          git clone --depth 1 https://git.netfilter.org/libmnl
-          cd libmnl
-          ./autogen.sh
+          curl -sL -o libmnl.tar.bz2 https://netfilter.org/projects/libmnl/files/libmnl-1.0.5.tar.bz2
+          tar xf libmnl.tar.bz2
+          cd libmnl-1.0.5
           ./configure --host=aarch64-linux-android --prefix=$PREFIX --disable-static --enable-shared
-          make -j$(nproc)
-          make install
+          make -j$(nproc) && make install
           cd ..
 
-          git clone --depth 1 https://git.netfilter.org/libnfnetlink
-          cd libnfnetlink
-          ./autogen.sh
+          curl -sL -o libnfnetlink.tar.bz2 https://netfilter.org/projects/libnfnetlink/files/libnfnetlink-1.0.1.tar.bz2
+          tar xf libnfnetlink.tar.bz2
+          cd libnfnetlink-1.0.1
           PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=aarch64-linux-android --prefix=$PREFIX --disable-static --enable-shared
-          make -j$(nproc)
-          make install
+          make -j$(nproc) && make install
           cd ..
+          rm -f $PREFIX/include/libnfnetlink/linux_nfnetlink.h
+          sed -i 's|#include <libnfnetlink/linux_nfnetlink.h>|#include <linux/netfilter/nfnetlink.h>|g' $PREFIX/include/libnfnetlink/libnfnetlink.h || true
+          sed -i 's|#include <linux_nfnetlink.h>|#include <linux/netfilter/nfnetlink.h>|g' $PREFIX/include/libnfnetlink/libnfnetlink.h || true
+          sed -i 's|#include "linux_nfnetlink.h"|#include <linux/netfilter/nfnetlink.h>|g' $PREFIX/include/libnfnetlink/libnfnetlink.h || true
 
-          git clone --depth 1 https://git.netfilter.org/libnetfilter_queue
-          cd libnetfilter_queue
-          ./autogen.sh
+          curl -sL -o libnetfilter_queue.tar.bz2 https://netfilter.org/projects/libnetfilter_queue/files/libnetfilter_queue-1.0.5.tar.bz2
+          tar xf libnetfilter_queue.tar.bz2
+          cd libnetfilter_queue-1.0.5
           PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=aarch64-linux-android --prefix=$PREFIX --disable-static --enable-shared
-          make -j$(nproc)
-          make install
+          make -j$(nproc) && make install
 
       - name: Build libs (arm)
         run: |
@@ -59,28 +60,29 @@ jobs:
           PREFIX=$PWD/deps-arm/install
           mkdir -p deps-arm && cd deps-arm
 
-          git clone --depth 1 https://git.netfilter.org/libmnl
-          cd libmnl
-          ./autogen.sh
+          curl -sL -o libmnl.tar.bz2 https://netfilter.org/projects/libmnl/files/libmnl-1.0.5.tar.bz2
+          tar xf libmnl.tar.bz2
+          cd libmnl-1.0.5
           ./configure --host=arm-linux-androideabi --prefix=$PREFIX --disable-static --enable-shared
-          make -j$(nproc)
-          make install
+          make -j$(nproc) && make install
           cd ..
 
-          git clone --depth 1 https://git.netfilter.org/libnfnetlink
-          cd libnfnetlink
-          ./autogen.sh
+          curl -sL -o libnfnetlink.tar.bz2 https://netfilter.org/projects/libnfnetlink/files/libnfnetlink-1.0.1.tar.bz2
+          tar xf libnfnetlink.tar.bz2
+          cd libnfnetlink-1.0.1
           PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=arm-linux-androideabi --prefix=$PREFIX --disable-static --enable-shared
-          make -j$(nproc)
-          make install
+          make -j$(nproc) && make install
           cd ..
+          rm -f $PREFIX/include/libnfnetlink/linux_nfnetlink.h
+          sed -i 's|#include <libnfnetlink/linux_nfnetlink.h>|#include <linux/netfilter/nfnetlink.h>|g' $PREFIX/include/libnfnetlink/libnfnetlink.h || true
+          sed -i 's|#include <linux_nfnetlink.h>|#include <linux/netfilter/nfnetlink.h>|g' $PREFIX/include/libnfnetlink/libnfnetlink.h || true
+          sed -i 's|#include "linux_nfnetlink.h"|#include <linux/netfilter/nfnetlink.h>|g' $PREFIX/include/libnfnetlink/libnfnetlink.h || true
 
-          git clone --depth 1 https://git.netfilter.org/libnetfilter_queue
-          cd libnetfilter_queue
-          ./autogen.sh
+          curl -sL -o libnetfilter_queue.tar.bz2 https://netfilter.org/projects/libnetfilter_queue/files/libnetfilter_queue-1.0.5.tar.bz2
+          tar xf libnetfilter_queue.tar.bz2
+          cd libnetfilter_queue-1.0.5
           PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=arm-linux-androideabi --prefix=$PREFIX --disable-static --enable-shared
-          make -j$(nproc)
-          make install
+          make -j$(nproc) && make install
 
       - name: Compile ttlq arm64
         run: |
@@ -98,20 +100,16 @@ jobs:
             ttlq.c -o ttlq_arm \
             -L$PWD/deps-arm/install/lib -lnetfilter_queue -lnfnetlink -lmnl
 
-      - name: Collect shared libs
+      - name: Collect
         run: |
           mkdir -p out
-          cp ttlq_arm out/ttlq_arm
-          cp ttlq_arm64 out/ttlq_arm64
-          cp -P deps-arm64/install/lib/libmnl.so* out/ 2>/dev/null || true
-          cp -P deps-arm64/install/lib/libnfnetlink.so* out/ 2>/dev/null || true
-          cp -P deps-arm64/install/lib/libnetfilter_queue.so* out/ 2>/dev/null || true
-          cp -P deps-arm/install/lib/libmnl.so* out/ 2>/dev/null || true
-          cp -P deps-arm/install/lib/libnfnetlink.so* out/ 2>/dev/null || true
-          cp -P deps-arm/install/lib/libnetfilter_queue.so* out/ 2>/dev/null || true
+          cp ttlq_arm out/
+          cp ttlq_arm64 out/
+          cp -P deps-arm64/install/lib/*.so* out/ 2>/dev/null || true
+          cp -P deps-arm/install/lib/*.so* out/ 2>/dev/null || true
           ls -la out/
 
-      - name: Upload artifacts
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: ttlq-binaries
