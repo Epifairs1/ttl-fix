@@ -104,15 +104,18 @@ jobs:
 
       - name: Collect
         run: |
-          mkdir -p out
-          cp ttlq_arm out/
-          cp ttlq_arm64 out/
-          cp -P deps-arm64/install/lib/*.so* out/ 2>/dev/null || true
-          cp -P deps-arm/install/lib/*.so* out/ 2>/dev/null || true
-          ls -la out/
+          mkdir -p out/arm64 out/arm
+          cp ttlq_arm64 out/arm64/ttlq
+          cp ttlq_arm out/arm/ttlq
+          cp -P deps-arm64/install/lib/*.so* out/arm64/
+          cp -P deps-arm/install/lib/*.so* out/arm/
+          echo "--- arm64 ---"
+          ls -la out/arm64/
+          echo "--- arm ---"
+          ls -la out/arm/
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: ttlq-binaries
-          path: out/*
+          path: out/
