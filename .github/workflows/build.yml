@@ -40,10 +40,7 @@ jobs:
           PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=aarch64-linux-android --prefix=$PREFIX --disable-static --enable-shared
           make -j$(nproc) && make install
           cd ..
-          rm -f $PREFIX/include/libnfnetlink/linux_nfnetlink.h
-          sed -i 's|#include <libnfnetlink/linux_nfnetlink.h>|#include <linux/netfilter/nfnetlink.h>|g' $PREFIX/include/libnfnetlink/libnfnetlink.h || true
-          sed -i 's|#include <linux_nfnetlink.h>|#include <linux/netfilter/nfnetlink.h>|g' $PREFIX/include/libnfnetlink/libnfnetlink.h || true
-          sed -i 's|#include "linux_nfnetlink.h"|#include <linux/netfilter/nfnetlink.h>|g' $PREFIX/include/libnfnetlink/libnfnetlink.h || true
+          printf '#include <linux/netfilter/nfnetlink.h>\n' > $PREFIX/include/libnfnetlink/linux_nfnetlink.h
 
           curl -sL -o libnetfilter_queue.tar.bz2 https://netfilter.org/projects/libnetfilter_queue/files/libnetfilter_queue-1.0.5.tar.bz2
           tar xf libnetfilter_queue.tar.bz2
@@ -73,10 +70,7 @@ jobs:
           PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=arm-linux-androideabi --prefix=$PREFIX --disable-static --enable-shared
           make -j$(nproc) && make install
           cd ..
-          rm -f $PREFIX/include/libnfnetlink/linux_nfnetlink.h
-          sed -i 's|#include <libnfnetlink/linux_nfnetlink.h>|#include <linux/netfilter/nfnetlink.h>|g' $PREFIX/include/libnfnetlink/libnfnetlink.h || true
-          sed -i 's|#include <linux_nfnetlink.h>|#include <linux/netfilter/nfnetlink.h>|g' $PREFIX/include/libnfnetlink/libnfnetlink.h || true
-          sed -i 's|#include "linux_nfnetlink.h"|#include <linux/netfilter/nfnetlink.h>|g' $PREFIX/include/libnfnetlink/libnfnetlink.h || true
+          printf '#include <linux/netfilter/nfnetlink.h>\n' > $PREFIX/include/libnfnetlink/linux_nfnetlink.h
 
           curl -sL -o libnetfilter_queue.tar.bz2 https://netfilter.org/projects/libnetfilter_queue/files/libnetfilter_queue-1.0.5.tar.bz2
           tar xf libnetfilter_queue.tar.bz2
