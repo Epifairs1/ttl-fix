@@ -45,6 +45,9 @@ jobs:
           curl -sL -o libnetfilter_queue.tar.bz2 https://netfilter.org/projects/libnetfilter_queue/files/libnetfilter_queue-1.0.5.tar.bz2
           tar xf libnetfilter_queue.tar.bz2
           cd libnetfilter_queue-1.0.5
+          sed -i 's/^SUBDIRS = extra/SUBDIRS =/' src/Makefile.am
+          sed -i 's|extra/libnetfilter_queue_extra.la||g' src/Makefile.am
+          autoreconf -fi
           PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=aarch64-linux-android --prefix=$PREFIX --disable-static --enable-shared
           make -j$(nproc) && make install
 
@@ -75,6 +78,9 @@ jobs:
           curl -sL -o libnetfilter_queue.tar.bz2 https://netfilter.org/projects/libnetfilter_queue/files/libnetfilter_queue-1.0.5.tar.bz2
           tar xf libnetfilter_queue.tar.bz2
           cd libnetfilter_queue-1.0.5
+          sed -i 's/^SUBDIRS = extra/SUBDIRS =/' src/Makefile.am
+          sed -i 's|extra/libnetfilter_queue_extra.la||g' src/Makefile.am
+          autoreconf -fi
           PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=arm-linux-androideabi --prefix=$PREFIX --disable-static --enable-shared
           make -j$(nproc) && make install
 
