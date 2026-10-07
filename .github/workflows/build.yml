@@ -18,45 +18,67 @@ jobs:
         with:
           ndk-version: r26b
 
-      - name: Build libnfnetlink + libnetfilter_queue (arm64)
+      - name: Build libs (arm64)
         run: |
           set -e
           export CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang
           export AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           export RANLIB=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib
+          PREFIX=$PWD/deps-arm64/install
           mkdir -p deps-arm64 && cd deps-arm64
-          git clone --depth 1 https://git.netfilter.org/libnfnetlink
-          cd libnfnetlink
+
+          git clone --depth 1 https://git.netfilter.org/libmnl
+          cd libmnl
           ./autogen.sh
-          ./configure --host=aarch64-linux-android --prefix=$PWD/../install --disable-static --enable-shared
+          ./configure --host=aarch64-linux-android --prefix=$PREFIX --disable-static --enable-shared
           make -j$(nproc)
           make install
           cd ..
+
+          git clone --depth 1 https://git.netfilter.org/libnfnetlink
+          cd libnfnetlink
+          ./autogen.sh
+          PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=aarch64-linux-android --prefix=$PREFIX --disable-static --enable-shared
+          make -j$(nproc)
+          make install
+          cd ..
+
           git clone --depth 1 https://git.netfilter.org/libnetfilter_queue
           cd libnetfilter_queue
           ./autogen.sh
-          PKG_CONFIG_PATH=$PWD/../install/lib/pkgconfig ./configure --host=aarch64-linux-android --prefix=$PWD/../install --disable-static --enable-shared
+          PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=aarch64-linux-android --prefix=$PREFIX --disable-static --enable-shared
           make -j$(nproc)
           make install
 
-      - name: Build libnfnetlink + libnetfilter_queue (arm)
+      - name: Build libs (arm)
         run: |
           set -e
           export CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi30-clang
           export AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           export RANLIB=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib
+          PREFIX=$PWD/deps-arm/install
           mkdir -p deps-arm && cd deps-arm
-          git clone --depth 1 https://git.netfilter.org/libnfnetlink
-          cd libnfnetlink
+
+          git clone --depth 1 https://git.netfilter.org/libmnl
+          cd libmnl
           ./autogen.sh
-          ./configure --host=arm-linux-androideabi --prefix=$PWD/../install --disable-static --enable-shared
+          ./configure --host=arm-linux-androideabi --prefix=$PREFIX --disable-static --enable-shared
           make -j$(nproc)
           make install
           cd ..
+
+          git clone --depth 1 https://git.netfilter.org/libnfnetlink
+          cd libnfnetlink
+          ./autogen.sh
+          PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=arm-linux-androideabi --prefix=$PREFIX --disable-static --enable-shared
+          make -j$(nproc)
+          make install
+          cd ..
+
           git clone --depth 1 https://git.netfilter.org/libnetfilter_queue
           cd libnetfilter_queue
           ./autogen.sh
-          PKG_CONFIG_PATH=$PWD/../install/lib/pkgconfig ./configure --host=arm-linux-androideabi --prefix=$PWD/../install --disable-static --enable-shared
+          PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=arm-linux-androideabi --prefix=$PREFIX --disable-static --enable-shared
           make -j$(nproc)
           make install
 
@@ -66,7 +88,7 @@ jobs:
             -O2 -s \
             -I$PWD/deps-arm64/install/include \
             ttlq.c -o ttlq_arm64 \
-            -L$PWD/deps-arm64/install/lib -lnetfilter_queue -lnfnetlink
+            -L$PWD/deps-arm64/install/lib -lnetfilter_queue -lnfnetlink -lmnl
 
       - name: Compile ttlq arm
         run: |
@@ -74,28 +96,23 @@ jobs:
             -O2 -s \
             -I$PWD/deps-arm/install/include \
             ttlq.c -o ttlq_arm \
-            -L$PWD/deps-arm/install/lib -lnetfilter_queue -lnfnetlink
+            -L$PWD/deps-arm/install/lib -lnetfilter_queue -lnfnetlink -lmnl
 
-      - name: Copy shared libs
+      - name: Collect shared libs
         run: |
-          cp deps-arm64/install/lib/libnetfilter_queue.so* . 2>/dev/null || true
-          cp deps-arm64/install/lib/libnfnetlink.so* . 2>/dev/null || true
-          mv libnetfilter_queue.so* libnetfilter_queue_arm64.so 2>/dev/null || true
-          mv libnfnetlink.so* libnfnetlink_arm64.so 2>/dev/null || true
-          cp deps-arm/install/lib/libnetfilter_queue.so* . 2>/dev/null || true
-          cp deps-arm/install/lib/libnfnetlink.so* . 2>/dev/null || true
-          mv libnetfilter_queue.so* libnetfilter_queue_arm.so 2>/dev/null || true
-          mv libnfnetlink.so* libnfnetlink_arm.so 2>/dev/null || true
-          ls -la
+          mkdir -p out
+          cp ttlq_arm out/ttlq_arm
+          cp ttlq_arm64 out/ttlq_arm64
+          cp -P deps-arm64/install/lib/libmnl.so* out/ 2>/dev/null || true
+          cp -P deps-arm64/install/lib/libnfnetlink.so* out/ 2>/dev/null || true
+          cp -P deps-arm64/install/lib/libnetfilter_queue.so* out/ 2>/dev/null || true
+          cp -P deps-arm/install/lib/libmnl.so* out/ 2>/dev/null || true
+          cp -P deps-arm/install/lib/libnfnetlink.so* out/ 2>/dev/null || true
+          cp -P deps-arm/install/lib/libnetfilter_queue.so* out/ 2>/dev/null || true
+          ls -la out/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ttlq-binaries
-          path: |
-            ttlq_arm
-            ttlq_arm64
-            libnetfilter_queue_arm64.so*
-            libnfnetlink_arm64.so*
-            libnetfilter_queue_arm.so*
-            libnfnetlink_arm.so*
+          path: out/*
