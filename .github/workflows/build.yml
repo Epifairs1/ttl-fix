@@ -45,9 +45,10 @@ jobs:
           curl -sL -o libnetfilter_queue.tar.bz2 https://netfilter.org/projects/libnetfilter_queue/files/libnetfilter_queue-1.0.5.tar.bz2
           tar xf libnetfilter_queue.tar.bz2
           cd libnetfilter_queue-1.0.5
-          sed -i 's/^SUBDIRS = extra/SUBDIRS =/' src/Makefile.am
-          sed -i 's|extra/libnetfilter_queue_extra.la||g' src/Makefile.am
-          autoreconf -fi
+          sed -i '/^union tcp_word_hdr/,/^};/d' src/extra/tcp.c
+          sed -i '/^#define tcp_flag_word/d' src/extra/tcp.c
+          sed -i '1i #include <linux/if_ether.h>' src/extra/pktbuff.c
+          printf '#define IPTOS_TOS_MASK 0x1E\n#define IPTOS_TOS(tos) ((tos) & IPTOS_TOS_MASK)\n#define IPTOS_PREC_MASK 0xE0\n#define IPTOS_PREC(tos) ((tos) & IPTOS_PREC_MASK)\n' | cat - src/extra/ipv4.c > /tmp/ipv4.c && mv /tmp/ipv4.c src/extra/ipv4.c
           PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=aarch64-linux-android --prefix=$PREFIX --disable-static --enable-shared
           make -j$(nproc) && make install
 
@@ -78,9 +79,10 @@ jobs:
           curl -sL -o libnetfilter_queue.tar.bz2 https://netfilter.org/projects/libnetfilter_queue/files/libnetfilter_queue-1.0.5.tar.bz2
           tar xf libnetfilter_queue.tar.bz2
           cd libnetfilter_queue-1.0.5
-          sed -i 's/^SUBDIRS = extra/SUBDIRS =/' src/Makefile.am
-          sed -i 's|extra/libnetfilter_queue_extra.la||g' src/Makefile.am
-          autoreconf -fi
+          sed -i '/^union tcp_word_hdr/,/^};/d' src/extra/tcp.c
+          sed -i '/^#define tcp_flag_word/d' src/extra/tcp.c
+          sed -i '1i #include <linux/if_ether.h>' src/extra/pktbuff.c
+          printf '#define IPTOS_TOS_MASK 0x1E\n#define IPTOS_TOS(tos) ((tos) & IPTOS_TOS_MASK)\n#define IPTOS_PREC_MASK 0xE0\n#define IPTOS_PREC(tos) ((tos) & IPTOS_PREC_MASK)\n' | cat - src/extra/ipv4.c > /tmp/ipv4.c && mv /tmp/ipv4.c src/extra/ipv4.c
           PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=arm-linux-androideabi --prefix=$PREFIX --disable-static --enable-shared
           make -j$(nproc) && make install
 
