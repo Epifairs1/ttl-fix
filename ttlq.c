@@ -13,10 +13,12 @@
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 
-#define QUEUE_NUM 200
+#define DEFAULT_QUEUE 200
 #define TTL_VALUE 64
 
 static volatile int keep_running = 1;
+static int g_queue_num = DEFAULT_QUEUE;
+static int g_verbose = 0;
 
 static void handle_sig(int sig) {
     (void)sig;
@@ -59,6 +61,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
             struct ip6_hdr *ip6h = (struct ip6_hdr *)pkt;
             if (ip6h->ip6_hlim != TTL_VALUE) {
                 ip6h->ip6_hlim = TTL_VALUE;
+                return nfq_set_verdict(qh, id, NF_ACCEPT, len, pkt);
             }
         }
     }
@@ -66,11 +69,34 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
 }
 
+static void usage(const char *prog) {
+    fprintf(stderr, "Usage: %s [-q queue_num] [-v] [-h]\n", prog);
+    fprintf(stderr, "  -q N   NFQUEUE number (default: %d)\n", DEFAULT_QUEUE);
+    fprintf(stderr, "  -v     verbose output\n");
+    fprintf(stderr, "  -h     this help\n");
+}
+
 int main(int argc, char **argv) {
-    int verbose = 0;
-    int i;
-    for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-v") == 0) verbose = 1;
+    int opt;
+    while ((opt = getopt(argc, argv, "q:vh")) != -1) {
+        switch (opt) {
+            case 'q':
+                g_queue_num = atoi(optarg);
+                if (g_queue_num < 0 || g_queue_num > 65535) {
+                    fprintf(stderr, "ttlq: invalid queue number: %s\n", optarg);
+                    return 1;
+                }
+                break;
+            case 'v':
+                g_verbose = 1;
+                break;
+            case 'h':
+                usage(argv[0]);
+                return 0;
+            default:
+                usage(argv[0]);
+                return 1;
+        }
     }
 
     signal(SIGTERM, handle_sig);
@@ -94,10 +120,10 @@ int main(int argc, char **argv) {
     nfq_unbind_pf(h, AF_INET6);
     nfq_bind_pf(h, AF_INET6);
 
-    struct nfq_q_handle *qh = nfq_create_queue(h, QUEUE_NUM, &cb, NULL);
+    struct nfq_q_handle *qh = nfq_create_queue(h, g_queue_num, &cb, NULL);
     if (!qh) {
         fprintf(stderr, "ttlq: nfq_create_queue(%d) failed: %s\n",
-                QUEUE_NUM, strerror(errno));
+                g_queue_num, strerror(errno));
         nfq_close(h);
         return 1;
     }
@@ -111,8 +137,8 @@ int main(int argc, char **argv) {
 
     int fd = nfq_fd(h);
 
-    if (verbose) {
-        fprintf(stderr, "ttlq: started, queue=%d, ttl=%d\n", QUEUE_NUM, TTL_VALUE);
+    if (g_verbose) {
+        fprintf(stderr, "ttlq: started, queue=%d, ttl=%d\n", g_queue_num, TTL_VALUE);
     }
 
     char buf[65536] __attribute__((aligned(8)));
@@ -131,7 +157,7 @@ int main(int argc, char **argv) {
         nfq_handle_packet(h, buf, rv);
     }
 
-    if (verbose) fprintf(stderr, "ttlq: stopping\n");
+    if (g_verbose) fprintf(stderr, "ttlq: stopping\n");
 
     nfq_destroy_queue(qh);
     nfq_close(h);
