@@ -1,165 +1,127 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <signal.h>
-#include <errno.h>
-#include <time.h>
-#include <sys/socket.h>
-#include <linux/netfilter.h>
-#include <linux/netfilter_ipv4.h>
-#include <linux/netfilter_ipv6.h>
-#include <libnetfilter_queue/libnetfilter_queue.h>
-#include <netinet/ip.h>
-#include <netinet/ip6.h>
+name: Build ttlq
 
-#define DEFAULT_QUEUE 200
-#define TTL_VALUE 64
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
 
-static volatile int keep_running = 1;
-static int g_queue_num = DEFAULT_QUEUE;
-static int g_verbose = 0;
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-static void handle_sig(int sig) {
-    (void)sig;
-    keep_running = 0;
-}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-static void recalc_checksum_v4(struct iphdr *iph) {
-    iph->check = 0;
-    unsigned int sum = 0;
-    unsigned short *p = (unsigned short *)iph;
-    int i;
-    for (i = 0; i < (int)(iph->ihl * 2); i++) {
-        sum += p[i];
-        sum = (sum & 0xffff) + (sum >> 16);
-    }
-    iph->check = (unsigned short)(~sum);
-}
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26b
 
-static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
-              struct nfq_data *nfa, void *data) {
-    (void)nfmsg;
-    (void)data;
+      - name: Build libs (arm64)
+        run: |
+          set -e
+          export CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang
+          export AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          export RANLIB=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib
+          PREFIX=$PWD/deps-arm64/install
+          mkdir -p deps-arm64 && cd deps-arm64
+          curl -sL -o libmnl.tar.bz2 https://netfilter.org/projects/libmnl/files/libmnl-1.0.5.tar.bz2
+          tar xf libmnl.tar.bz2
+          cd libmnl-1.0.5
+          ./configure --host=aarch64-linux-android --prefix=$PREFIX --disable-static --enable-shared
+          make -j$(nproc) && make install
+          cd ..
+          curl -sL -o libnfnetlink.tar.bz2 https://netfilter.org/projects/libnfnetlink/files/libnfnetlink-1.0.1.tar.bz2
+          tar xf libnfnetlink.tar.bz2
+          cd libnfnetlink-1.0.1
+          PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=aarch64-linux-android --prefix=$PREFIX --disable-static --enable-shared
+          make -j$(nproc) && make install
+          cd ..
+          printf '#include <linux/netfilter/nfnetlink.h>\n' > $PREFIX/include/libnfnetlink/linux_nfnetlink.h
+          curl -sL -o libnetfilter_queue.tar.bz2 https://netfilter.org/projects/libnetfilter_queue/files/libnetfilter_queue-1.0.5.tar.bz2
+          tar xf libnetfilter_queue.tar.bz2
+          cd libnetfilter_queue-1.0.5
+          sed -i '/^union tcp_word_hdr/,/^};/d' src/extra/tcp.c
+          sed -i '/^#define tcp_flag_word/d' src/extra/tcp.c
+          sed -i '1i #include <linux/if_ether.h>' src/extra/pktbuff.c
+          printf '#define IPTOS_TOS_MASK 0x1E\n#define IPTOS_TOS(tos) ((tos) & IPTOS_TOS_MASK)\n#define IPTOS_PREC_MASK 0xE0\n#define IPTOS_PREC(tos) ((tos) & IPTOS_PREC_MASK)\n' | cat - src/extra/ipv4.c > /tmp/ipv4.c && mv /tmp/ipv4.c src/extra/ipv4.c
+          PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=aarch64-linux-android --prefix=$PREFIX --disable-static --enable-shared
+          make -j$(nproc) && make install
 
-    struct nfqnl_msg_packet_hdr *ph = nfq_get_msg_packet_hdr(nfa);
-    unsigned int id = ph ? ntohl(ph->packet_id) : 0;
+      - name: Build libs (arm)
+        run: |
+          set -e
+          export CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi30-clang
+          export AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          export RANLIB=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib
+          PREFIX=$PWD/deps-arm/install
+          mkdir -p deps-arm && cd deps-arm
+          curl -sL -o libmnl.tar.bz2 https://netfilter.org/projects/libmnl/files/libmnl-1.0.5.tar.bz2
+          tar xf libmnl.tar.bz2
+          cd libmnl-1.0.5
+          ./configure --host=arm-linux-androideabi --prefix=$PREFIX --disable-static --enable-shared
+          make -j$(nproc) && make install
+          cd ..
+          curl -sL -o libnfnetlink.tar.bz2 https://netfilter.org/projects/libnfnetlink/files/libnfnetlink-1.0.1.tar.bz2
+          tar xf libnfnetlink.tar.bz2
+          cd libnfnetlink-1.0.1
+          PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=arm-linux-androideabi --prefix=$PREFIX --disable-static --enable-shared
+          make -j$(nproc) && make install
+          cd ..
+          printf '#include <linux/netfilter/nfnetlink.h>\n' > $PREFIX/include/libnfnetlink/linux_nfnetlink.h
+          curl -sL -o libnetfilter_queue.tar.bz2 https://netfilter.org/projects/libnetfilter_queue/files/libnetfilter_queue-1.0.5.tar.bz2
+          tar xf libnetfilter_queue.tar.bz2
+          cd libnetfilter_queue-1.0.5
+          sed -i '/^union tcp_word_hdr/,/^};/d' src/extra/tcp.c
+          sed -i '/^#define tcp_flag_word/d' src/extra/tcp.c
+          sed -i '1i #include <linux/if_ether.h>' src/extra/pktbuff.c
+          printf '#define IPTOS_TOS_MASK 0x1E\n#define IPTOS_TOS(tos) ((tos) & IPTOS_TOS_MASK)\n#define IPTOS_PREC_MASK 0xE0\n#define IPTOS_PREC(tos) ((tos) & IPTOS_PREC_MASK)\n' | cat - src/extra/ipv4.c > /tmp/ipv4.c && mv /tmp/ipv4.c src/extra/ipv4.c
+          PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig ./configure --host=arm-linux-androideabi --prefix=$PREFIX --disable-static --enable-shared
+          make -j$(nproc) && make install
 
-    unsigned char *pkt = NULL;
-    int len = nfq_get_payload(nfa, &pkt);
+      - name: Compile ttlq arm64
+        run: |
+          $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang \
+            -O2 -s -I$PWD/deps-arm64/install/include \
+            ttlq.c -o ttlq_arm64 \
+            -L$PWD/deps-arm64/install/lib -lnetfilter_queue -lnfnetlink -lmnl
 
-    if (len > 0 && pkt) {
-        unsigned char version = (pkt[0] >> 4);
-        if (version == 4 && len >= (int)sizeof(struct iphdr)) {
-            struct iphdr *iph = (struct iphdr *)pkt;
-            if (iph->ttl != TTL_VALUE) {
-                iph->ttl = TTL_VALUE;
-                recalc_checksum_v4(iph);
-                return nfq_set_verdict(qh, id, NF_ACCEPT, len, pkt);
-            }
-        } else if (version == 6 && len >= (int)sizeof(struct ip6_hdr)) {
-            struct ip6_hdr *ip6h = (struct ip6_hdr *)pkt;
-            if (ip6h->ip6_hlim != TTL_VALUE) {
-                ip6h->ip6_hlim = TTL_VALUE;
-                return nfq_set_verdict(qh, id, NF_ACCEPT, len, pkt);
-            }
-        }
-    }
+      - name: Compile ttlq arm
+        run: |
+          $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi30-clang \
+            -O2 -s -I$PWD/deps-arm/install/include \
+            ttlq.c -o ttlq_arm \
+            -L$PWD/deps-arm/install/lib -lnetfilter_queue -lnfnetlink -lmnl
 
-    return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
-}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ttlq-binaries
+          path: |
+            ttlq_arm
+            ttlq_arm64
 
-static void usage(const char *prog) {
-    fprintf(stderr, "Usage: %s [-q queue_num] [-v] [-h]\n", prog);
-    fprintf(stderr, "  -q N   NFQUEUE number (default: %d)\n", DEFAULT_QUEUE);
-    fprintf(stderr, "  -v     verbose output\n");
-    fprintf(stderr, "  -h     this help\n");
-}
+      - name: Build module zip
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -e
+          mkdir -p build/lib/arm build/lib/arm64
+          cp ttlq_arm build/lib/arm/ttlq
+          cp ttlq_arm64 build/lib/arm64/ttlq
+          cp deps-arm/install/lib/libmnl.so build/lib/arm/
+          cp deps-arm/install/lib/libnetfilter_queue.so build/lib/arm/
+          cp deps-arm/install/lib/libnfnetlink.so.0.2.0 build/lib/arm/
+          cp deps-arm64/install/lib/libmnl.so build/lib/arm64/
+          cp deps-arm64/install/lib/libnetfilter_queue.so build/lib/arm64/
+          cp deps-arm64/install/lib/libnfnetlink.so.0.2.0 build/lib/arm64/
+          cp module.prop customize.sh service.sh uninstall.sh status.sh action.sh README.md ttlfix.conf.example build/
+          cd build
+          zip -r ../ttl_fix_64.zip .
 
-int main(int argc, char **argv) {
-    int opt;
-    while ((opt = getopt(argc, argv, "q:vh")) != -1) {
-        switch (opt) {
-            case 'q':
-                g_queue_num = atoi(optarg);
-                if (g_queue_num < 0 || g_queue_num > 65535) {
-                    fprintf(stderr, "ttlq: invalid queue number: %s\n", optarg);
-                    return 1;
-                }
-                break;
-            case 'v':
-                g_verbose = 1;
-                break;
-            case 'h':
-                usage(argv[0]);
-                return 0;
-            default:
-                usage(argv[0]);
-                return 1;
-        }
-    }
-
-    signal(SIGTERM, handle_sig);
-    signal(SIGINT, handle_sig);
-    signal(SIGHUP, handle_sig);
-
-    struct nfq_handle *h = nfq_open();
-    if (!h) {
-        fprintf(stderr, "ttlq: nfq_open failed: %s\n", strerror(errno));
-        return 1;
-    }
-
-    if (nfq_unbind_pf(h, AF_INET) < 0) {
-        fprintf(stderr, "ttlq: nfq_unbind_pf v4 failed\n");
-    }
-    if (nfq_bind_pf(h, AF_INET) < 0) {
-        fprintf(stderr, "ttlq: nfq_bind_pf v4 failed\n");
-        nfq_close(h);
-        return 1;
-    }
-    nfq_unbind_pf(h, AF_INET6);
-    nfq_bind_pf(h, AF_INET6);
-
-    struct nfq_q_handle *qh = nfq_create_queue(h, g_queue_num, &cb, NULL);
-    if (!qh) {
-        fprintf(stderr, "ttlq: nfq_create_queue(%d) failed: %s\n",
-                g_queue_num, strerror(errno));
-        nfq_close(h);
-        return 1;
-    }
-
-    if (nfq_set_mode(qh, NFQNL_COPY_PACKET, 0xffff) < 0) {
-        fprintf(stderr, "ttlq: nfq_set_mode failed\n");
-        nfq_destroy_queue(qh);
-        nfq_close(h);
-        return 1;
-    }
-
-    int fd = nfq_fd(h);
-
-    if (g_verbose) {
-        fprintf(stderr, "ttlq: started, queue=%d, ttl=%d\n", g_queue_num, TTL_VALUE);
-    }
-
-    char buf[65536] __attribute__((aligned(8)));
-
-    while (keep_running) {
-        int rv = recv(fd, buf, sizeof(buf), 0);
-        if (rv < 0) {
-            if (errno == EINTR) continue;
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                usleep(100000);
-                continue;
-            }
-            fprintf(stderr, "ttlq: recv failed: %s\n", strerror(errno));
-            break;
-        }
-        nfq_handle_packet(h, buf, rv);
-    }
-
-    if (g_verbose) fprintf(stderr, "ttlq: stopping\n");
-
-    nfq_destroy_queue(qh);
-    nfq_close(h);
-    return 0;
-}
+      - name: Upload release zip
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ttl_fix_64.zip
